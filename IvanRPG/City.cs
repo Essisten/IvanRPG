@@ -41,7 +41,7 @@ namespace IvanRPG
             Wood = 10;
             Stone = 10;
             Gold = 10;
-            Type = 4;
+            Type = 1;
         }
     }
 }

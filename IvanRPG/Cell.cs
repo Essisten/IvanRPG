@@ -7,14 +7,18 @@ namespace IvanRPG
     {
         /// <summary>
         /// 0 - взрыба
-        /// 1 - Дерево
-        /// 2 - Камень
-        /// 3 - Золото
-        /// 4 - Город
+        /// 1 - Город
+        /// 2 - Дерево
+        /// 3 - Камень
+        /// 4 - Золото
         /// 5 - Деревня
         /// </summary>
-        private static readonly string[] icons = new string[] { "🐟", "🌲", "🍙", "🌕", "🏠", "?" };
+        private static readonly string[] icons = new string[] { "🐟", "🏠", "🌲", "🍙", "🌕", "🇺🇸" };
         public int Type { get; set; }
+        public Cell()
+        {
+            Type = 0;
+        }
         public string GetIcon()
         {
             return icons[Type];

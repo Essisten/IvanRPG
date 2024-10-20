@@ -15,6 +15,7 @@ namespace IvanRPG
         private static readonly int group_id = 199833644;
         public static readonly long?[] Admins = new long?[] { 559144282, 334913416 };
         public static Cell[,] Map = new Cell[5, 5];
+        private static bool started = false;
         static void Main(string[] args)
         {
             Console.WriteLine("Авторизация...");
@@ -42,19 +43,25 @@ namespace IvanRPG
                         long? userID = a.MessageNew.Message.FromId;
                         City user = City.Cities.Find(_ => _.Owner == userID);
                         string respond = "";
-                        try
-                        {
+                        //try
+                        //{
                             switch (UserMessage)
                             {
                                 case "тест":
                                     respond = "тесто?";
                                     break;
                                 case "!начать":
+                                    if (started)
+                                    {
+                                        respond = "Игра уже во всю идёт";
+                                        break;
+                                    }
                                     if (!Admins.Contains(userID))
                                         respond = "Не тебе решать когда начинать игру";
                                     else
                                     {
-                                        //Начало игры
+                                        StartGame();
+                                        respond = "Игра начата!\n\n" + GetMap();
                                     }
                                     break;
                                 default:
@@ -65,7 +72,17 @@ namespace IvanRPG
                                             respond = "Ты уже в очереди, не переживай";
                                             break;
                                         }
-                                        Regex regex = new("^!играть (.+)$");
+                                        else if (City.Cities.Count >= Map.Rank * Map.Length)
+                                        {
+                                            respond = "Слишком много игроков! Они даже не поместятся на карте!";
+                                            break;
+                                    }
+                                    else if (started)
+                                    {
+                                        respond = "А вот раньше надо было";
+                                        break;
+                                    }
+                                    Regex regex = new("^!играть (.+)$");
                                         string name = regex.Match(UserMessage).Groups[1].Value;
                                         City.Cities.Add(new City(name, userID.GetValueOrDefault()));
                                         respond = $"Добавлен город \"{name}\"\nИгроков в ожидании: {City.Cities.Count}";
@@ -113,11 +130,11 @@ namespace IvanRPG
                                     }
                                     break;
                             }
-                        }
+                        /*}
                         catch (Exception e)
                         {
-                            respond = "Ой-ой! Что-то я запуталась... Может, перезапустите меня?\n\n" + e.Message;
-                        }
+                            respond = "Ой-ой! Что-то я запуталась...\n\n" + e.Message;
+                        }*/
                         if (respond == "") continue;
                         api.Messages.Send(new MessagesSendParams
                         {
@@ -137,6 +154,58 @@ namespace IvanRPG
                 AccessToken = key
             });
 
+        }
+        public static void StartGame()
+        {
+            Random r = new();
+            //Заполнение взрыбами
+            for (int i = 0; i < Map.GetLength(0); i++)
+            {
+                for (int k = 0; k < Map.GetLength(1); k++)
+                {
+                    Map[i, k] = new Cell();
+                }
+            }
+            //Заполнение игроками
+            for (int i = 0; i < City.Cities.Count; i++)
+            {
+                int y = r.Next(Map.GetLength(0)),
+                    x = r.Next(Map.GetLength(1));
+                Cell place = Map[y, x];
+                if (place.Type != 0)
+                {
+                    i--;
+                    continue;
+                }
+                Map[y, x] = City.Cities[i];
+            }
+            //Заполнение всем остальным
+            for (int i = 0; i < Map.GetLength(0); i++)
+            {
+                for (int k = 0; k < Map.GetLength(1); k++)
+                {
+                    Cell spot = Map[i, k];
+                    if (spot.Type != 0)
+                        continue;
+                    spot.Type = r.Next(2, 6);
+                }
+            }
+            started = true;
+        }
+        public static string GetMap()
+        {
+            string map = "__1️⃣2️⃣3️⃣4️⃣5️⃣\n";
+            string vert = "АБВГДЕЖЗИКЛМНОПРСТУФХЦЧШ";
+            for (int i = 0; i < Map.GetLength(0); i++)
+            {
+                map += $"{vert[i]} ";
+                for (int k = 0; k < Map.GetLength(1); k++)
+                {
+                    map += Map[i, k].GetIcon();
+                }
+                map += "\n";
+            }
+            return map;
         }
     }
 }
