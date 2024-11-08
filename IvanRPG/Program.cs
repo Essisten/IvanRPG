@@ -6,7 +6,7 @@ using VkNet;
 using VkNet.Enums.SafetyEnums;
 using VkNet.Model;
 using VkNet.Model.RequestParams;
-using VkNet.Model.Keyboard;
+using System.Timers;
 
 namespace IvanRPG
 {
@@ -19,12 +19,16 @@ namespace IvanRPG
         public static Cell[,] Map = new Cell[5, 5];
         private static bool started = false;
         private static readonly string alphabet = "АБВГДЕЖЗИКЛМНОПРСТУФХЦЧШ";
+        public static Timer Timer = new(1000);
         static void Main(string[] args)
         {
             Console.WriteLine("Авторизация...");
             Auth();
             Random rnd = new();
             Console.WriteLine("Авторизация прошла успешно");
+            Timer.Elapsed += Timer_Second;
+            Timer.Enabled = true;
+            Timer.Start();
             while (true)
             {
                 var s = api.Groups.GetLongPollServer(ulong.Parse(group_id.ToString()));
@@ -108,13 +112,13 @@ namespace IvanRPG
                                         string temp_string = regex.Match(UserMessage).Groups[2].Value;
                                         if (temp_string != "")
                                             amount = Convert.ToInt32(temp_string);
-                                        amount = Math.Min(5 - user.Units.Count, amount);
+                                        amount = Math.Min(10 * user.Barracks - user.Units.Count, amount);
                                         if (user.Gold < 2 * amount)
                                         {
                                             respond = "Недостаточно золота для найма";
                                             break;
                                         }
-                                        else if (user.Units.Count >= 5)
+                                        else if (user.Units.Count >= 10 * user.Barracks)
                                         {
                                             respond = "Нет места в казармах";
                                             break;
@@ -163,7 +167,13 @@ namespace IvanRPG
                                                 respond = "Нельзя нападать на себя";
                                                 break;
                                             }
-                                        }
+                                            api.Messages.Send(new MessagesSendParams
+                                            {
+                                                Message = $"На тебя собирается напасть игрок \"{user.Name}\"!",
+                                                PeerId = c.Owner,
+                                                RandomId = rnd.Next()
+                                            });
+                                    }
                                         Group g = new(user, y, x, peerID);
                                         for (int i = 0; i < user.Units.Count; i++)
                                         {
@@ -194,19 +204,7 @@ namespace IvanRPG
                                         }
                                         respond = $"Название: {user.Name}\n";
                                         int x = 0, y = 0;
-                                        for (int i = 0; i < Map.GetLength(0); i++)
-                                        {
-                                            for (int k = 0; k < Map.GetLength(1); k++)
-                                            {
-                                                if (Map[i, k].Type != 1)
-                                                    continue;
-                                                if (user.Owner == ((City)Map[i, k]).Owner)
-                                                {
-                                                    y = i;
-                                                    x = k;
-                                                }
-                                            }
-                                        }
+                                        user.GetCoords(ref x, ref y);
                                         respond += $"Координаты: {x + 1}{alphabet[y]}\n\n";
                                         respond += $"Танки: {user.Units.Count(_ => _.Type == 1)}\n";
                                         respond += $"Дамагеры: {user.Units.Count(_ => _.Type == 2)}\n\n";
@@ -221,8 +219,59 @@ namespace IvanRPG
                                         respond += $"Уровень каменноломни: {user.StoneFarm}\n";
                                         respond += $"Уровень золотого рудника: {user.GoldFarm}\n\n";
                                         respond += $"Число жизней: {user.Lifes}\n";
+                                }
+                                    else if (Regex.IsMatch(UserMessage, "^!дерево"))
+                                    {
+                                        if (!started)
+                                        {
+                                            respond = "Дождись начала игры";
+                                            break;
+                                        }
+                                        if (user.WoodFarm_CD > 0)
+                                        {
+                                            respond = $"Сбор ресурса будет доступень лишь через {user.WoodFarm_CD} секунд";
+                                            break;
+                                        }
+                                        int collected = 10 * user.WoodFarm;
+                                        user.Wood += collected;
+                                        user.WoodFarm_CD = 30;
+                                        respond = $"Собрано {collected} древесины";
                                     }
-                                    break;
+                                    else if (Regex.IsMatch(UserMessage, "^!камень"))
+                                    {
+                                        if (!started)
+                                        {
+                                            respond = "Дождись начала игры";
+                                            break;
+                                        }
+                                        if (user.StoneFarm_CD > 0)
+                                        {
+                                            respond = $"Сбор ресурса будет доступень лишь через {user.StoneFarm_CD} секунд";
+                                            break;
+                                        }
+                                        int collected = 10 * user.StoneFarm;
+                                        user.Stone += collected;
+                                        user.StoneFarm_CD = 30;
+                                        respond = $"Собрано {collected} камня";
+                                    }
+                                    else if (Regex.IsMatch(UserMessage, "^!золото"))
+                                    {
+                                        if (!started)
+                                        {
+                                            respond = "Дождись начала игры";
+                                            break;
+                                        }
+                                        if (user.GoldFarm_CD > 0)
+                                        {
+                                            respond = $"Сбор ресурса будет доступень лишь через {user.GoldFarm_CD} секунд";
+                                            break;
+                                        }
+                                        int collected = 10 * user.GoldFarm;
+                                        user.Gold += collected;
+                                        user.GoldFarm_CD = 30;
+                                        respond = $"Собрано {collected} золота";
+                                    }
+                                break;
                             }
                         /*}
                         catch (Exception e)
@@ -241,6 +290,20 @@ namespace IvanRPG
                 }
             }
         }
+
+        private static void Timer_Second(object sender, ElapsedEventArgs e)
+        {
+            foreach (City city in City.Cities)
+            {
+                if (city.WoodFarm_CD > 0)
+                    city.WoodFarm_CD--;
+                if (city.StoneFarm_CD > 0)
+                    city.StoneFarm_CD--;
+                if (city.GoldFarm_CD > 0)
+                    city.GoldFarm_CD--;
+            }
+        }
+
         public static void Auth()
         {
             api.Authorize(new ApiAuthParams()

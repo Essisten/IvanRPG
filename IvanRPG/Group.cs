@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Timers;
 using VkNet.Model.RequestParams;
+using static System.Math;
 
 namespace IvanRPG
 {
@@ -19,7 +20,10 @@ namespace IvanRPG
             chatID_response = chat;
             destination[0] = y;
             destination[1] = x;
-            Timer = new(5000);
+            int c_x = 0, c_y = 0;
+            own.GetCoords(ref c_x, ref c_y);
+            int distance = Convert.ToInt32(Ceiling(Sqrt(Sqrt(Abs(x - c_x)) + Sqrt(Abs(y - c_y)))));
+            Timer = new(60000 * distance);
             Timer.Elapsed += Timer_Elapsed;
             Timer.Start();
             Timer.AutoReset = false;

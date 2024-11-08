@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
+using System.Timers;
 
 namespace IvanRPG
 {
@@ -26,6 +26,9 @@ namespace IvanRPG
         public int Wood { get; set; }
         public int Stone { get; set; }
         public int Gold { get; set; }
+        public int WoodFarm_CD { get; set; }
+        public int StoneFarm_CD { get; set; }
+        public int GoldFarm_CD { get; set; }
 
         public City(string name, long owner)
         {
@@ -44,6 +47,7 @@ namespace IvanRPG
             Gold = 1000;
             Type = 1;
         }
+
         public void Defend(ref List<Unit> attackers)
         {
             while (attackers.Count > 0 && Units.Count > 0)
@@ -67,6 +71,22 @@ namespace IvanRPG
                         break;
                 }
                 defenders = defenders.Where(_ => _.HP > 0).ToList();
+            }
+        }
+        public void GetCoords(ref int x, ref int y)
+        {
+            for (int i = 0; i < Program.Map.GetLength(0); i++)
+            {
+                for (int k = 0; k < Program.Map.GetLength(1); k++)
+                {
+                    if (Program.Map[i, k].Type != 1)
+                        continue;
+                    if (Owner == ((City)Program.Map[i, k]).Owner)
+                    {
+                        y = i;
+                        x = k;
+                    }
+                }
             }
         }
     }
