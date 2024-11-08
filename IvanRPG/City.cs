@@ -9,7 +9,8 @@ namespace IvanRPG
     {
         public static List<City> Cities = new List<City>();
 
-        public List<Unit> Units = new List<Unit>();
+        public List<Unit> Units = new();
+        public List<Group> Groups = new();
         public string Name { get; set; }
         public long Owner { get; set; }
 
@@ -38,10 +39,35 @@ namespace IvanRPG
             StoneFarm = 1;
             GoldFarm = 1;
             Lifes = 1;
-            Wood = 10;
-            Stone = 10;
-            Gold = 10;
+            Wood = 50;
+            Stone = 50;
+            Gold = 1000;
             Type = 1;
+        }
+        public void Defend(ref List<Unit> attackers)
+        {
+            while (attackers.Count > 0 && Units.Count > 0)
+            {
+                FightTurn(ref attackers, ref Units);
+                FightTurn(ref Units, ref attackers);
+            }
+        }
+        private void FightTurn(ref List<Unit> attackers, ref List<Unit> defenders)
+        {
+            for (int attacker_id = 0; attacker_id < attackers.Count; attacker_id++)
+            {
+                defenders = defenders.OrderBy(_ => _.Type).ToList();
+                attackers = attackers.OrderBy(_ => _.GetHashCode()).ToList();
+                foreach (Unit def_unit in defenders)
+                {
+                    Unit attacker_unit = attackers[attacker_id];
+                    def_unit.HP -= Math.Max(attacker_unit.Attack - def_unit.Block, 1);
+                    attacker_id++;
+                    if (attacker_id >= attackers.Count)
+                        break;
+                }
+                defenders = defenders.Where(_ => _.HP > 0).ToList();
+            }
         }
     }
 }
