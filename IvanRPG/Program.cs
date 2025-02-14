@@ -1,25 +1,26 @@
 ﻿using System;
 using System.Text.RegularExpressions;
 using System.Linq;
-using System.Collections.Generic;
+using System.Collections;
+using System.Text.Json;
+using System.Timers;
 using VkNet;
 using VkNet.Enums.SafetyEnums;
 using VkNet.Model;
 using VkNet.Model.RequestParams;
-using System.Timers;
+using VkNet.Model.Keyboard;
+using System.Collections.Generic;
 
 namespace IvanRPG
 {
     class Program
     {
+        private const string api_key = "vk1.a.aXxURvxpJe_O7zUDUv2Lv4H4wKrwK6h3Qn9hKwpssAwMSvy20ynHaCJD1IXKYewRrS2LpokPVrud7JhKzJ4XHm0HAPXpDspC7k7gyD_CrDk0YbmFHRf465nER7YqZvlFUoI62wN1uwzRkJv3ms66ggoje_wOCzTwee0gin3qM_hNIn_4EHIPoLJo54CL6bbRtELTHhTnw7a-CBPF7iJc8Q";
+        private const int group_id = 199833644;
         public static readonly VkApi api = new();
-        private static readonly string key = "vk1.a.aXxURvxpJe_O7zUDUv2Lv4H4wKrwK6h3Qn9hKwpssAwMSvy20ynHaCJD1IXKYewRrS2LpokPVrud7JhKzJ4XHm0HAPXpDspC7k7gyD_CrDk0YbmFHRf465nER7YqZvlFUoI62wN1uwzRkJv3ms66ggoje_wOCzTwee0gin3qM_hNIn_4EHIPoLJo54CL6bbRtELTHhTnw7a-CBPF7iJc8Q";
-        private static readonly int group_id = 199833644;
-        public static readonly long?[] Admins = new long?[] { 559144282, 334913416 };
-        public static Cell[,] Map = new Cell[5, 5];
-        private static bool started = false;
-        private static readonly string alphabet = "АБВГДЕЖЗИКЛМНОПРСТУФХЦЧШ";
         public static Timer Timer = new(1000);
+        public static KeyboardBuilder key = new();
+        public static MessageKeyboard keyboard_current = key.Build();
         static void Main(string[] args)
         {
             Console.WriteLine("Авторизация...");
@@ -29,6 +30,7 @@ namespace IvanRPG
             Timer.Elapsed += Timer_Second;
             Timer.Enabled = true;
             Timer.Start();
+            BotCommandHandler.InitKeyboards();
             while (true)
             {
                 var s = api.Groups.GetLongPollServer(ulong.Parse(group_id.ToString()));
@@ -41,6 +43,11 @@ namespace IvanRPG
 
                 });
                 if (poll?.Updates == null) continue;
+                keyboard_current = key.Clear().Build();
+                if (BotCommandHandler.Started)
+                    keyboard_current = BotCommandHandler.keyboard_game;
+                else
+                    keyboard_current = BotCommandHandler.keyboard_start;
                 foreach (var a in poll.Updates)
                 {
                     if (a.Type == GroupUpdateType.MessageNew)
@@ -49,244 +56,146 @@ namespace IvanRPG
                         long? peerID = a.MessageNew.Message.PeerId;
                         long? userID = a.MessageNew.Message.FromId;
                         City user = City.Cities.Find(_ => _.Owner == userID);
+                        UserVK vk_user = UserVK.AddUser(userID.Value);
                         string respond = "";
-                        //try
-                        //{
+                        if (user != null || UserMessage == "!клава" || UserMessage.Contains("!играть ") || vk_user.cache[0] == "join" ||
+                                 (CanUse(ref respond, userID.Value) && UserMessage == "!начать"))
+                        {
+                            //try
+                            //{
                             switch (UserMessage)
                             {
                                 case "тест":
                                     respond = "тесто?";
                                     break;
                                 case "!начать":
-                                    if (started)
-                                    {
-                                        respond = "Игра уже во всю идёт";
+                                    if (BotCommandHandler.GameIsStarted(ref respond, "Игра уже идёт"))
                                         break;
-                                    }
-                                    if (!Admins.Contains(userID))
-                                        respond = "Не тебе решать когда начинать игру";
-                                    else
-                                    {
-                                        StartGame();
-                                        respond = "Игра начата!\n\n" + GetMap();
-                                    }
+                                    BotCommandHandler.StartGameCommand(ref respond, userID);
+                                    break;
+                                case "!инфо":
+                                    if (BotCommandHandler.GameIsStarted(ref respond, "Дождись начала игры", true))
+                                        break;
+                                    BotCommandHandler.GetUserInfoCommand(ref respond, user);
+                                    break;
+                                case "!дерево":
+                                    if (BotCommandHandler.GameIsStarted(ref respond, "Дождись начала игры", true))
+                                        break;
+                                    if (BotCommandHandler.CollectWoodCommand(ref respond, user))
+                                        break;
+                                    break;
+                                case "!камень":
+                                    if (BotCommandHandler.GameIsStarted(ref respond, "Дождись начала игры", true))
+                                        break;
+                                    if (BotCommandHandler.CollectStoneCommand(ref respond, user))
+                                        break;
+                                    break;
+                                case "!золото":
+                                    if (BotCommandHandler.GameIsStarted(ref respond, "Дождись начала игры", true))
+                                        break;
+                                    if (BotCommandHandler.CollectGoldCommand(ref respond, user))
+                                        break;
+                                    break;
+                                case "!клава":
+                                    BotCommandHandler.ToggleKeyboardCommand(ref respond);
                                     break;
                                 default:
                                     if (Regex.IsMatch(UserMessage, "^!играть (.+)$"))
                                     {
-                                        if (user != null)
-                                        {
-                                            respond = "Ты уже в очереди, не переживай";
+                                        if (BotCommandHandler.GameIsStarted(ref respond, "А вот раньше надо было"))
                                             break;
-                                        }
-                                        else if (City.Cities.Count >= Map.Rank * Map.Length)
-                                        {
-                                            respond = "Слишком много игроков! Они даже не поместятся на карте!";
-                                            break;
-                                    }
-                                    else if (started)
-                                    {
-                                        respond = "А вот раньше надо было";
-                                        break;
-                                    }
-                                    Regex regex = new("^!играть (.+)$");
-                                        string name = regex.Match(UserMessage).Groups[1].Value;
-                                        City.Cities.Add(new City(name, userID.GetValueOrDefault()));
-                                        respond = $"Добавлен город \"{name}\"\nИгроков в ожидании: {City.Cities.Count}";
+                                        BotCommandHandler.JoinTheGameCommand(ref respond, user, userID, UserMessage);
                                     }
                                     else if (Regex.IsMatch(UserMessage, "^!нанять ((?:дд)|(?:танк))(?: (\\d+))?$"))
                                     {
-                                        if (user == null)
-                                        {
-                                            respond = "Да ты даже не играешь!";
+                                        if (BotCommandHandler.GameIsStarted(ref respond, "Дождись начала игры", true))
                                             break;
-                                        }
-                                        if (!started)
-                                        {
-                                            respond = "Дождись начала игры";
+                                        if (BotCommandHandler.HireUnitCommand(ref respond, user, UserMessage))
                                             break;
-                                        }
-                                        Regex regex = new Regex("^!нанять ((?:дд)|(?:танк))(?: (\\d+))?$");
-                                        string name = regex.Match(UserMessage).Groups[1].Value;
-                                        int amount = 1;
-                                        string temp_string = regex.Match(UserMessage).Groups[2].Value;
-                                        if (temp_string != "")
-                                            amount = Convert.ToInt32(temp_string);
-                                        amount = Math.Min(10 * user.Barracks - user.Units.Count, amount);
-                                        if (user.Gold < 2 * amount)
-                                        {
-                                            respond = "Недостаточно золота для найма";
-                                            break;
-                                        }
-                                        else if (user.Units.Count >= 10 * user.Barracks)
-                                        {
-                                            respond = "Нет места в казармах";
-                                            break;
-                                        }
-                                        Unit unit;
-                                        if (name == "дд")
-                                            unit = new Unit(2);
-                                        else
-                                            unit = new Unit(1);
-                                        user.Gold -= 2 * amount;
-                                        for (int i = 0; i < amount; i++)
-                                        {
-                                            user.Units.Add(unit);
-                                        }
-                                        respond = $"Нанят {name}";
-                                        if (amount > 1)
-                                            respond += $" {amount} штуки";
                                     }
                                     else if (Regex.IsMatch(UserMessage, "^!отправить (\\d+)(\\w) (\\d+) (\\d+)$"))
                                     {
-                                        if (!started)
-                                        {
-                                            respond = "Дождись начала игры";
+                                        if (BotCommandHandler.GameIsStarted(ref respond, "Дождись начала игры", true))
                                             break;
-                                        }
-                                        Regex regex = new("^!отправить (\\d+)(\\w) (\\d+) (\\d+)$");
-                                            string h_coord = regex.Match(UserMessage).Groups[1].Value,
-                                                v_coord = regex.Match(UserMessage).Groups[2].Value.ToUpper(),
-                                                dd_amount = regex.Match(UserMessage).Groups[3].Value,
-                                                tank_amount = regex.Match(UserMessage).Groups[4].Value;
-                                        int x = Convert.ToInt32(h_coord) - 1,
-                                            y = alphabet.IndexOf(v_coord[0]),
-                                            dd = Convert.ToInt32(dd_amount),
-                                            tank = Convert.ToInt32(tank_amount);
-                                        if (y == -1 || y > Map.GetLength(0) || x > Map.GetLength(1))
-                                        {
-                                            respond = "Неверные координаты";
+                                        if (BotCommandHandler.SendGroupCommand(ref respond, user, UserMessage, peerID))
                                             break;
-                                        }
-                                        Cell target = Map[y, x];
-                                        if (target.Type == 1)
+                                    }
+                                    else
+                                    {
+                                        switch (vk_user.cache[0])
                                         {
-                                            City c = (City)target;
-                                            if (c.Owner == user.Owner)
-                                            {
-                                                respond = "Нельзя нападать на себя";
+                                            case "join":
+                                                if (BotCommandHandler.GameIsStarted(ref respond, "А вот раньше надо было"))
+                                                    break;
+                                                BotCommandHandler.JoinTheGameCommand(ref respond, user, userID, UserMessage);
+                                                vk_user.cache[0] = "";
                                                 break;
-                                            }
-                                            api.Messages.Send(new MessagesSendParams
-                                            {
-                                                Message = $"На тебя собирается напасть игрок \"{user.Name}\"!",
-                                                PeerId = c.Owner,
-                                                RandomId = rnd.Next()
-                                            });
+                                        }
                                     }
-                                        Group g = new(user, y, x, peerID);
-                                        for (int i = 0; i < user.Units.Count; i++)
-                                        {
-                                            Unit unit = user.Units[i];
-                                            if (unit.Type == 1 && tank > 0)
-                                                tank--;
-                                            else if (unit.Type == 2 && dd > 0)
-                                                dd--;
-                                            else
-                                                continue;
-                                            g.Team.Add(unit);
-                                            user.Units.Remove(unit);
-                                            i--;
-                                        }
-                                        if (g.Team.Count == 0)
-                                        {
-                                            respond = "Фарш кончился";
-                                            break;
-                                        }
-                                        user.Groups.Add(g);
-                                    }
-                                    else if (Regex.IsMatch(UserMessage, "^!инфо"))
-                                    {
-                                        if (!started)
-                                        {
-                                            respond = "Дождись начала игры";
-                                            break;
-                                        }
-                                        respond = $"Название: {user.Name}\n";
-                                        int x = 0, y = 0;
-                                        user.GetCoords(ref x, ref y);
-                                        respond += $"Координаты: {x + 1}{alphabet[y]}\n\n";
-                                        respond += $"Танки: {user.Units.Count(_ => _.Type == 1)}\n";
-                                        respond += $"Дамагеры: {user.Units.Count(_ => _.Type == 2)}\n\n";
-                                        respond += $"Древесина: {user.Wood}\n";
-                                        respond += $"Камни: {user.Stone}\n";
-                                        respond += $"Золото: {user.Gold}\n\n";
-                                        respond += $"Уровень стен: {user.Wall}\n";
-                                        respond += $"Уровень казарм: {user.Barracks}\n";
-                                        respond += $"Уровень рынка: {user.Market}\n";
-                                        respond += $"Уровень ратуши: {user.MainBuild}\n\n";
-                                        respond += $"Уровень лесопильни: {user.WoodFarm}\n";
-                                        respond += $"Уровень каменноломни: {user.StoneFarm}\n";
-                                        respond += $"Уровень золотого рудника: {user.GoldFarm}\n\n";
-                                        respond += $"Число жизней: {user.Lifes}\n";
-                                }
-                                    else if (Regex.IsMatch(UserMessage, "^!дерево"))
-                                    {
-                                        if (!started)
-                                        {
-                                            respond = "Дождись начала игры";
-                                            break;
-                                        }
-                                        if (user.WoodFarm_CD > 0)
-                                        {
-                                            respond = $"Сбор ресурса будет доступень лишь через {user.WoodFarm_CD} секунд";
-                                            break;
-                                        }
-                                        int collected = 10 * user.WoodFarm;
-                                        user.Wood += collected;
-                                        user.WoodFarm_CD = 30;
-                                        respond = $"Собрано {collected} древесины";
-                                    }
-                                    else if (Regex.IsMatch(UserMessage, "^!камень"))
-                                    {
-                                        if (!started)
-                                        {
-                                            respond = "Дождись начала игры";
-                                            break;
-                                        }
-                                        if (user.StoneFarm_CD > 0)
-                                        {
-                                            respond = $"Сбор ресурса будет доступень лишь через {user.StoneFarm_CD} секунд";
-                                            break;
-                                        }
-                                        int collected = 10 * user.StoneFarm;
-                                        user.Stone += collected;
-                                        user.StoneFarm_CD = 30;
-                                        respond = $"Собрано {collected} камня";
-                                    }
-                                    else if (Regex.IsMatch(UserMessage, "^!золото"))
-                                    {
-                                        if (!started)
-                                        {
-                                            respond = "Дождись начала игры";
-                                            break;
-                                        }
-                                        if (user.GoldFarm_CD > 0)
-                                        {
-                                            respond = $"Сбор ресурса будет доступень лишь через {user.GoldFarm_CD} секунд";
-                                            break;
-                                        }
-                                        int collected = 10 * user.GoldFarm;
-                                        user.Gold += collected;
-                                        user.GoldFarm_CD = 30;
-                                        respond = $"Собрано {collected} золота";
-                                    }
-                                break;
+                                    break;
                             }
-                        /*}
-                        catch (Exception e)
-                        {
-                            respond = "Ой-ой! Что-то я запуталась...\n\n" + e.Message;
-                        }*/
+                            /*}
+                            catch (Exception e)
+                            {
+                                respond = "Ой-ой! Что-то я запуталась...\n\n" + e.Message;
+                            }*/
+                        }
                         if (respond == "") continue;
-                        api.Messages.Send(new MessagesSendParams
+                        MessagesSendParams param = new()
                         {
                             Message = respond,
                             PeerId = peerID,
                             RandomId = rnd.Next()
-                        });
+                        };
+                        if (BotCommandHandler.keyboard_enabled || (!BotCommandHandler.keyboard_enabled && UserMessage == "!клава"))
+                            param.Keyboard = keyboard_current;
+                        api.Messages.Send(param);
                     }
-
+                    else if (a.Type == GroupUpdateType.MessageEvent)
+                    {
+                        MessagePayloadBody payload = JsonSerializer.Deserialize<MessagePayloadBody>(a.MessageEvent.Payload);
+                        long? peerID = a.MessageEvent.PeerId;
+                        long? userID = a.MessageEvent.UserId;
+                        City user = City.Cities.Find(_ => _.Owner == userID);
+                        UserVK vk_user = UserVK.AddUser(userID.Value);
+                        string respond = "";
+                        if (user != null || payload.button == "-keyboard" || payload.button == "join" ||
+                                        (CanUse(ref respond, userID.Value) && payload.button == "start"))
+                        {
+                            switch (payload.button)
+                            {
+                                case "info":
+                                    if (BotCommandHandler.GameIsStarted(ref respond, "Дождись начала игры", true))
+                                        break;
+                                    BotCommandHandler.GetUserInfoCommand(ref respond, user);
+                                    break;
+                                case "-keyboard":
+                                    BotCommandHandler.ToggleKeyboardCommand(ref respond);
+                                    break;
+                                case "join":
+                                    BotCommandHandler.JoinTheGameCommand(ref respond, user, userID);
+                                    break;
+                                case "start":
+                                    if (!CanUse(ref respond, userID.Value))
+                                        break;
+                                    if (BotCommandHandler.GameIsStarted(ref respond, "Игра уже идёт"))
+                                        break;
+                                    BotCommandHandler.StartGameCommand(ref respond, userID);
+                                    break;
+                            }
+                        }
+                        if (respond == "") continue;
+                        MessagesSendParams param = new()
+                        {
+                            Message = respond,
+                            PeerId = peerID,
+                            RandomId = rnd.Next()
+                        };
+                        if (BotCommandHandler.keyboard_enabled || payload.button == "-keyboard")
+                            param.Keyboard = keyboard_current;
+                        api.Messages.Send(param);
+                        api.Messages.SendMessageEventAnswer(a.MessageEvent.EventId, userID.Value, peerID.Value);
+                    }
                 }
             }
         }
@@ -308,60 +217,28 @@ namespace IvanRPG
         {
             api.Authorize(new ApiAuthParams()
             {
-                AccessToken = key
+                AccessToken = api_key
             });
 
         }
-        public static void StartGame()
+
+        /// <summary>
+        /// Проверяет, является ли отправитель админом
+        /// </summary>
+        /// <param name="respond">ответ</param>
+        /// <param name="user_id">идентификатор пользователя</param>
+        /// <returns></returns>
+        public static bool CanUse(ref string respond, long user_id)
         {
-            Random r = new();
-            //Заполнение взрыбами
-            for (int i = 0; i < Map.GetLength(0); i++)
+            if (BotCommandHandler.Admins.Contains(user_id))
             {
-                for (int k = 0; k < Map.GetLength(1); k++)
-                {
-                    Map[i, k] = new Cell();
-                }
+                return true;
             }
-            //Заполнение игроками
-            for (int i = 0; i < City.Cities.Count; i++)
+            else
             {
-                int y = r.Next(Map.GetLength(0)),
-                    x = r.Next(Map.GetLength(1));
-                Cell place = Map[y, x];
-                if (place.Type != 0)
-                {
-                    i--;
-                    continue;
-                }
-                Map[y, x] = City.Cities[i];
+                respond = "Пускай админ запустит игру";
+                return false;
             }
-            //Заполнение всем остальным
-            for (int i = 0; i < Map.GetLength(0); i++)
-            {
-                for (int k = 0; k < Map.GetLength(1); k++)
-                {
-                    Cell spot = Map[i, k];
-                    if (spot.Type != 0)
-                        continue;
-                    spot.Type = r.Next(2, 6);
-                }
-            }
-            started = true;
-        }
-        public static string GetMap()
-        {
-            string map = "__1️⃣2️⃣3️⃣4️⃣5️⃣\n";
-            for (int i = 0; i < Map.GetLength(0); i++)
-            {
-                map += $"{alphabet[i]} ";
-                for (int k = 0; k < Map.GetLength(1); k++)
-                {
-                    map += Map[i, k].GetIcon();
-                }
-                map += "\n";
-            }
-            return map;
         }
     }
 }

@@ -75,13 +75,13 @@ namespace IvanRPG
         }
         public void GetCoords(ref int x, ref int y)
         {
-            for (int i = 0; i < Program.Map.GetLength(0); i++)
+            for (int i = 0; i < BotCommandHandler.Map.GetLength(0); i++)
             {
-                for (int k = 0; k < Program.Map.GetLength(1); k++)
+                for (int k = 0; k < BotCommandHandler.Map.GetLength(1); k++)
                 {
-                    if (Program.Map[i, k].Type != 1)
+                    if (BotCommandHandler.Map[i, k].Type != 1)
                         continue;
-                    if (Owner == ((City)Program.Map[i, k]).Owner)
+                    if (Owner == ((City)BotCommandHandler.Map[i, k]).Owner)
                     {
                         y = i;
                         x = k;

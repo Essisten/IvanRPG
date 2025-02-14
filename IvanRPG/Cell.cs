@@ -24,4 +24,8 @@ namespace IvanRPG
             return icons[Type];
         }
     }
+    class MessagePayloadBody
+    {
+        public string button { get; set; }
+    }
 }

@@ -31,7 +31,7 @@ namespace IvanRPG
 
         private void Timer_Elapsed(object sender, ElapsedEventArgs e)
         {
-            Cell target = Program.Map[destination[0], destination[1]];
+            Cell target = BotCommandHandler.Map[destination[0], destination[1]];
             int gold = 0, wood = 0, stone = 0;
             string msg = "";
             Random rnd = new();
